@@ -2,6 +2,7 @@ package ui
 
 import (
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
@@ -19,12 +20,38 @@ var (
 	styleMDBullet = lipgloss.NewStyle().Foreground(colAmberMid).Bold(true)
 )
 
+// mdCache memoizes renderInlineMarkdown outputs. The renderer does a lot of
+// per-word lipgloss.Render work, and mouse-motion re-renders the whole grid
+// for every pixel of motion — without this, focus-follow-cursor lags badly.
+// Capped so it can't grow unbounded on long sessions.
+var (
+	mdCache   = make(map[string]string, 512)
+	mdCacheMu sync.Mutex
+)
+
+const mdCacheMax = 1024
+
 func renderInlineMarkdown(s string) string {
+	mdCacheMu.Lock()
+	if out, ok := mdCache[s]; ok {
+		mdCacheMu.Unlock()
+		return out
+	}
+	mdCacheMu.Unlock()
+
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {
 		lines[i] = renderMDLine(line)
 	}
-	return strings.Join(lines, "\n")
+	out := strings.Join(lines, "\n")
+
+	mdCacheMu.Lock()
+	if len(mdCache) >= mdCacheMax {
+		mdCache = make(map[string]string, 512)
+	}
+	mdCache[s] = out
+	mdCacheMu.Unlock()
+	return out
 }
 
 func renderMDLine(line string) string {

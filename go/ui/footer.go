@@ -29,7 +29,9 @@ func renderFooter(width int, page, pageCount int) string {
 		footerKey("i", "inject"),
 	)
 	if pageCount > 1 {
-		bits = append(bits, footerKey("C-⇥", "page"))
+		pill := lipgloss.NewStyle().Foreground(colAmber).Render("[ / ]") +
+			styleElapsed.Render("·page")
+		bits = append(bits, pill)
 	}
 	bits = append(bits,
 		footerKey("r", "rescan"),

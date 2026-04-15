@@ -348,58 +348,60 @@ func (m Model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 }
 
 // focusAt — set focus to the card under screen coords (x, y), if any.
+// Mirrors View's geometry exactly: 1-row banner, 1-row top margin, optional
+// 1-row note, 1-row footer. Grid layout and per-row heights come from the
+// same computeGridLayout used by renderGrid, and m.page offsets the index
+// into m.order so pagination stays consistent.
 func (m *Model) focusAt(x, y int) {
-	if len(m.order) == 0 {
+	if len(m.order) == 0 || m.width == 0 || m.height == 0 {
 		return
 	}
-	bannerH := 1
-	footerH := 1
+	const bannerH, topMargin, footerH = 1, 1, 1
 	noteH := 0
 	if m.note != "" {
 		noteH = 1
 	}
-	bodyTop := bannerH
-	bodyH := m.height - bannerH - footerH - noteH
-	if bodyH < 1 {
-		return
+	bodyTop := bannerH + topMargin
+	bodyH := m.height - bannerH - topMargin - footerH - noteH
+	if bodyH < 4 {
+		bodyH = 4
 	}
 	if y < bodyTop || y >= bodyTop+bodyH {
 		return
 	}
 
-	cols := gridCols
-	if len(m.order) < cols {
-		cols = len(m.order)
-	}
-	rows := (len(m.order) + cols - 1) / cols
-	gap := 1
-	cardW := (m.width - gap*(cols-1)) / cols
-	if cardW < 20 {
-		cardW = 20
-	}
-	cardH := bodyH / rows
-	if cardH < 1 {
-		cardH = 1
-	}
+	layout := computeGridLayout(len(m.order), m.width, bodyH)
 
-	col := x / (cardW + gap)
-	if col >= cols {
-		col = cols - 1
+	col := x / (layout.cardW + gridGap)
+	if col >= layout.cols {
+		col = layout.cols - 1
 	}
 	if col < 0 {
-		col = 0
+		return
 	}
-	row := (y - bodyTop) / cardH
-	if row >= rows {
-		row = rows - 1
+
+	// Resolve row by walking the per-row heights — View gives the first
+	// rows an extra line when bodyH doesn't divide evenly, so a plain
+	// division miscounts near row boundaries.
+	ry := y - bodyTop
+	row := -1
+	acc := 0
+	for r, h := range layout.rowHeights {
+		if ry < acc+h {
+			row = r
+			break
+		}
+		acc += h
 	}
 	if row < 0 {
-		row = 0
+		return
 	}
-	idx := row*cols + col
-	if idx >= 0 && idx < len(m.order) {
-		m.focus = idx
+
+	idx := m.page*layout.cardsPerPage + row*layout.cols + col
+	if idx < 0 || idx >= len(m.order) {
+		return
 	}
+	m.focus = idx
 }
 
 func (m Model) updatePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -596,17 +598,31 @@ func (m *Model) moveFocus(delta int) {
 	}
 	n := len(m.order)
 	m.focus = (m.focus + delta + n) % n
+	m.followFocusToPage()
 }
 
 func (m *Model) moveFocusRow(delta int) {
 	if len(m.order) == 0 {
 		return
 	}
-	target := m.focus + delta*gridCols
-	if target < 0 || target >= len(m.order) {
+	n := len(m.order)
+	m.focus = (m.focus + delta*gridCols + n) % n
+	m.followFocusToPage()
+}
+
+// followFocusToPage — flip to the page that contains m.focus so arrow
+// navigation that crosses a page boundary is visible without a separate
+// [ / ] press.
+func (m *Model) followFocusToPage() {
+	if m.width == 0 || len(m.order) == 0 {
 		return
 	}
-	m.focus = target
+	layout := computeGridLayout(len(m.order), m.width, m.bodyHeightApprox())
+	if layout.cardsPerPage == 0 {
+		return
+	}
+	m.page = m.focus / layout.cardsPerPage
+	m.clampPage()
 }
 
 func (m *Model) scrollFocused(delta int) {

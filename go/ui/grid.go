@@ -32,7 +32,7 @@ type gridInput struct {
 const (
 	gridGap         = 1  // blank columns between cards horizontally
 	minCardH        = 12 // below this we paginate instead of shrinking
-	maxRowsPerPage  = 3
+	maxRowsPerPage  = 2
 )
 
 // gridLayout — pure computation of page/row/col/card dimensions given the
