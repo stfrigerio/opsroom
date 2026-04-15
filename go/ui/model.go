@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"sort"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -11,6 +12,15 @@ import (
 	"opsroom/claude"
 	"opsroom/hypr"
 	"opsroom/kitty"
+	"opsroom/ports"
+)
+
+// view — which pane set is showing. Default zero value is the claude grid.
+type viewMode int
+
+const (
+	viewGrid  viewMode = 0
+	viewPorts viewMode = 1
 )
 
 const (
@@ -26,6 +36,7 @@ type tickMsg time.Time
 type scanResult struct {
 	sessions []claude.Session
 	windows  []hypr.Window
+	ports    []ports.Port
 	err      error
 }
 
@@ -51,12 +62,22 @@ type Model struct {
 
 	sessions []claude.Session
 	windows  []hypr.Window
+	ports    []ports.Port
 
 	// Stable ordering key for each session: slot index → PID.
 	order []int
 
 	focus int // index into `order`
 	page  int // 0-based page of the grid when cards paginate
+
+	view         viewMode
+	portsFocus   int // index into m.visiblePorts() when view == viewPorts
+	portsShowAll bool
+
+	// Two-step kill confirmation: first `x` arms, second `x` on the same
+	// pid within portsKillTill executes. Anything else cancels.
+	portsKillPID  int
+	portsKillTill time.Time
 
 	// Per-pid scroll offset (in event-lines). sticky means "snap to bottom
 	// on next rebuild". maxScroll is updated from View each frame and used
@@ -116,7 +137,8 @@ func scanCmd() tea.Cmd {
 			return scanResult{err: err}
 		}
 		wins, _ := hypr.Clients()
-		return scanResult{sessions: sessions, windows: wins}
+		ps, _ := ports.Scan()
+		return scanResult{sessions: sessions, windows: wins, ports: ps}
 	}
 }
 
@@ -156,15 +178,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.applyScan(msg.sessions, msg.windows)
+		m.ports = msg.ports
+		m.clampPortsFocus()
 
 	case tea.KeyMsg:
 		if m.promptOpen {
 			return m.updatePrompt(msg)
 		}
+		if m.view == viewPorts {
+			return m.updatePorts(msg)
+		}
 		return m.updateGrid(msg)
 
 	case tea.MouseMsg:
-		if m.promptOpen {
+		if m.promptOpen || m.view == viewPorts {
 			return m, nil
 		}
 		return m.updateMouse(msg)
@@ -219,9 +246,12 @@ func (m Model) updateGrid(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "i":
 		return m.openPrompt()
-	case "]", "n", "ctrl+tab":
+	case "o":
+		m.view = viewPorts
+		m.clampPortsFocus()
+	case "]", "ctrl+tab":
 		m.nextPage()
-	case "[", "p", "ctrl+shift+tab":
+	case "[", "ctrl+shift+tab":
 		m.prevPage()
 	case "ctrl+left":
 		m.swapFocus(-1)
@@ -264,6 +294,123 @@ func (m *Model) swapFocus(delta int) {
 	layout := computeGridLayout(len(m.order), m.width, m.bodyHeightApprox())
 	m.page = target / layout.cardsPerPage
 	m.clampPage()
+}
+
+func (m Model) updatePorts(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Any key other than "x" disarms a pending kill confirmation.
+	if msg.String() != "x" {
+		m.portsKillPID = 0
+	}
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	case "o", "esc":
+		m.view = viewGrid
+	case "r":
+		return m, scanCmd()
+	case "up", "k":
+		m.portsFocus--
+	case "down", "j":
+		m.portsFocus++
+	case "pgup":
+		m.portsFocus -= 10
+	case "pgdown":
+		m.portsFocus += 10
+	case "home":
+		m.portsFocus = 0
+	case "end":
+		m.portsFocus = len(m.visiblePorts()) - 1
+	case ".":
+		m.portsShowAll = !m.portsShowAll
+		m.portsFocus = 0
+	case "x":
+		return m.killFocusedPort()
+	case "enter":
+		if p := m.focusedPort(); p != nil && p.PID > 0 {
+			if w := hypr.WindowForPID(p.PID, m.windows); w != nil {
+				return m, jumpCmd(w.Address)
+			}
+			m.setNote("no hypr window for that pid", "warn", 2*time.Second)
+		}
+	}
+	m.clampPortsFocus()
+	return m, nil
+}
+
+func (m *Model) clampPortsFocus() {
+	vis := m.visiblePorts()
+	if len(vis) == 0 {
+		m.portsFocus = 0
+		return
+	}
+	if m.portsFocus < 0 {
+		m.portsFocus = 0
+	}
+	if m.portsFocus >= len(vis) {
+		m.portsFocus = len(vis) - 1
+	}
+}
+
+func (m Model) focusedPort() *ports.Port {
+	vis := m.visiblePorts()
+	if m.portsFocus < 0 || m.portsFocus >= len(vis) {
+		return nil
+	}
+	return &vis[m.portsFocus]
+}
+
+// killFocusedPort — two-step SIGTERM to the focused port's owner. First
+// press arms; second `x` on the same pid within portsKillTill fires. Any
+// other key (handled at the top of updatePorts) cancels.
+func (m Model) killFocusedPort() (tea.Model, tea.Cmd) {
+	p := m.focusedPort()
+	if p == nil {
+		return m, nil
+	}
+	if p.PID <= 0 {
+		m.setNote("no pid resolved — cannot kill", "warn", 2*time.Second)
+		return m, nil
+	}
+	// Armed on same pid and still fresh → execute.
+	if m.portsKillPID == p.PID && time.Now().Before(m.portsKillTill) {
+		err := syscall.Kill(p.PID, syscall.SIGTERM)
+		m.portsKillPID = 0
+		if err != nil {
+			m.setNote(fmt.Sprintf("kill pid %d: %s", p.PID, err), "error", 4*time.Second)
+			return m, nil
+		}
+		m.setNote(
+			fmt.Sprintf("SIGTERM → pid %d (%s :%d)", p.PID, p.Project(), p.Port),
+			"info", 3*time.Second,
+		)
+		// Re-scan so the row drops or updates.
+		return m, scanCmd()
+	}
+	// Arm.
+	m.portsKillPID = p.PID
+	m.portsKillTill = time.Now().Add(5 * time.Second)
+	m.setNote(
+		fmt.Sprintf("press x again within 5s to kill pid %d (%s :%d)",
+			p.PID, p.Project(), p.Port),
+		"warn", 5*time.Second,
+	)
+	return m, nil
+}
+
+// visiblePorts — m.ports with IsNoise rows stripped unless portsShowAll is
+// on. Cheap to recompute per call; Scan() already sorts by port.
+func (m Model) visiblePorts() []ports.Port {
+	if m.portsShowAll {
+		return m.ports
+	}
+	out := make([]ports.Port, 0, len(m.ports))
+	for _, p := range m.ports {
+		if p.IsNoise() {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 func (m *Model) nextPage() {

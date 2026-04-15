@@ -36,51 +36,77 @@ func renderPromptPanel(
 	slotSuffix string,
 	ta textarea.Model,
 ) string {
-	target := "(no target)"
+	var ws, proj string
 	if sess != nil && win != nil {
-		proj := claude.ProjectName(sess.CWD)
+		proj = strings.ToUpper(claude.ProjectName(sess.CWD))
 		if slotSuffix != "" {
 			proj = proj + " " + slotSuffix
 		}
-		target = fmt.Sprintf("WS%d · %s", win.Workspace, proj)
+		ws = fmt.Sprintf("WS%d", win.Workspace)
 	}
 
-	// Title stripe — inverse amber-hi, full width. Action on the left,
-	// target right-aligned. Same visual weight as a card header.
-	titleStyle := lipgloss.NewStyle().
-		Background(colAmberHi).
-		Foreground(colBlack).
-		Bold(true).
-		Width(width)
-	left := " ⟶ INJECT "
-	right := target + " "
-	pad := width - lipgloss.Width(left) - lipgloss.Width(right)
-	if pad < 1 {
-		pad = 1
+	// Frame takes 2 cols of border + 2 cols of padding on each side.
+	const pad = 2
+	border := 2
+	innerW := width - border - pad*2
+	if innerW < 20 {
+		innerW = 20
 	}
-	title := titleStyle.Render(left + strings.Repeat(" ", pad) + right)
 
-	// Body — no border. The textarea has its own 1-col left pad so the
-	// cursor isn't flush against the edge. Explicit width so the textarea
-	// fills the panel exactly.
-	bodyStyle := lipgloss.NewStyle().Width(width).Padding(0, 1)
-	body := bodyStyle.Render(ta.View())
+	// Title row — inverse INJECT stripe followed by a chained target
+	// (WS › PROJECT) so the user reads it as a single sentence. ░▒▓
+	// scanline caps on both sides give it a channel-band vibe.
+	deco := lipgloss.NewStyle().Foreground(colAmberHi).Render("░▒▓")
+	label := lipgloss.NewStyle().
+		Background(colAmberHi).Foreground(colBlack).Bold(true).
+		Render(" ⏵ INJECT ")
+	sepT := lipgloss.NewStyle().Foreground(colAmberDim).Render(" › ")
+	bright := lipgloss.NewStyle().Foreground(colAmberHi).Bold(true)
+	chain := label
+	if ws != "" {
+		chain += sepT + bright.Render(ws)
+	}
+	if proj != "" {
+		chain += sepT + bright.Render(proj)
+	}
+	if ws == "" && proj == "" {
+		chain += sepT + lipgloss.NewStyle().Foreground(colAmberDim).
+			Italic(true).Render("(no target)")
+	}
+	titleL := deco + " " + chain
+	titleR := deco
+	gap := innerW - lipgloss.Width(titleL) - lipgloss.Width(titleR)
+	if gap < 1 {
+		gap = 1
+	}
+	title := titleL + strings.Repeat(" ", gap) + titleR
 
-	// Hint line — dim amber, full width, aligns with the title stripe.
-	hint := lipgloss.NewStyle().
-		Foreground(colAmberDim).
-		Width(width).
-		Render(
-			" " + keyPill("⏎", "send") +
-				"   " + keyPill("⇧⏎", "newline") +
-				"   " + keyPill("␛", "abort"),
-		)
+	// Body: prompt-arrow prefix + textarea. The arrow lives in its own col
+	// so the cursor lines up with subsequent rows visually.
+	arrow := lipgloss.NewStyle().Foreground(colAmberHi).Bold(true).Render("› ")
+	// Reserve 2 cols for "› ".
+	ta.SetWidth(innerW - 2)
+	body := lipgloss.JoinHorizontal(lipgloss.Top, arrow, ta.View())
 
-	return lipgloss.JoinVertical(lipgloss.Left, title, body, hint)
+	// Hint — diamond-separated pills. Dim chrome so the eye stays on the
+	// input line.
+	sep := lipgloss.NewStyle().Foreground(colAmberDim).Render("  ◇  ")
+	hint := keyPill("⏎", "send") + sep +
+		keyPill("⇧⏎", "newline") + sep +
+		keyPill("␛", "abort")
+
+	inner := lipgloss.JoinVertical(lipgloss.Left,
+		title,
+		"",
+		body,
+		"",
+		hint,
+	)
+	return stylePrompt.Width(innerW + pad*2).Render(inner)
 }
 
 // keyPill — small keybinding marker for the inject hint line.
 func keyPill(k, label string) string {
 	return lipgloss.NewStyle().Foreground(colAmber).Bold(true).Render("["+k+"]") +
-		lipgloss.NewStyle().Foreground(colAmberDim).Render("·"+label)
+		lipgloss.NewStyle().Foreground(colAmberDim).Render(" "+label)
 }

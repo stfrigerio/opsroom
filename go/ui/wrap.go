@@ -128,13 +128,29 @@ func visWidth(s string) int {
 }
 
 // cutRunes — return the prefix of s whose visual width is at most `n`.
+// ANSI-aware: escape sequences pass through without contributing to width,
+// and we never stop mid-sequence (otherwise the unterminated CSI swallows
+// whatever follows, corrupting layout).
 func cutRunes(s string, n int) string {
 	if visWidth(s) <= n {
 		return s
 	}
 	out := strings.Builder{}
 	w := 0
+	inEscape := false
 	for _, r := range s {
+		if r == 0x1b {
+			inEscape = true
+			out.WriteRune(r)
+			continue
+		}
+		if inEscape {
+			out.WriteRune(r)
+			if r == 'm' {
+				inEscape = false
+			}
+			continue
+		}
 		rw := lipgloss.Width(string(r))
 		if w+rw > n {
 			break

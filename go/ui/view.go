@@ -29,6 +29,17 @@ func (m Model) View() string {
 	}
 
 	var body string
+	if m.view == viewPorts {
+		vis := m.visiblePorts()
+		hidden := len(m.ports) - len(vis)
+		body = renderPortsView(vis, m.width, bodyH, m.portsFocus)
+		parts := []string{banner, "", body}
+		if m.note != "" {
+			parts = append(parts, renderNote(m.width, m.note, m.noteSev))
+		}
+		parts = append(parts, renderPortsFooter(m.width, len(vis), hidden, m.portsShowAll))
+		return lipgloss.JoinVertical(lipgloss.Left, parts...)
+	}
 	if m.promptOpen {
 		panel := renderPromptPanel(
 			m.width,

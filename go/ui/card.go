@@ -75,8 +75,14 @@ func renderCard(in cardInput) cardOutput {
 	// can't trigger an internal re-wrap.
 	inner = clampLinesToWidth(inner, innerW)
 
+	// lipgloss.Style.Width sets the width of the padded content area (content
+	// + padding), not content alone — so we have to add the horizontal
+	// padding back in when handing it to the frame. Without this the frame
+	// squeezes our content by the padding amount and word-wraps the header.
+	frameW := innerW + frame.GetHorizontalPadding()
+	frameH := innerH + frame.GetVerticalPadding()
 	return cardOutput{
-		rendered: frame.Width(innerW).Height(innerH).Render(inner),
+		rendered: frame.Width(frameW).Height(frameH).Render(inner),
 		scroll:   log.scroll,
 		maxOff:   log.maxOff,
 	}

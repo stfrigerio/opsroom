@@ -53,6 +53,17 @@ func renderEventLog(in eventLogInput) eventLogOutput {
 	for len(vis) < in.height {
 		vis = append(vis, "")
 	}
+	// Pad every line to in.width. Without this the block's width is the
+	// widest line, so lipgloss.JoinHorizontal pins the scrollbar right
+	// after the longest visible line — scrolling into a run of short
+	// lines pulls the scrollbar left. The scrollbar has to live at a
+	// fixed column regardless of what's visible.
+	for i, ln := range vis {
+		w := visWidth(ln)
+		if w < in.width {
+			vis[i] = ln + strings.Repeat(" ", in.width-w)
+		}
+	}
 	return eventLogOutput{
 		rendered: strings.Join(vis, "\n"),
 		scroll:   off,
@@ -150,5 +161,9 @@ func buildEventLines(events []claude.Event, width int) []string {
 			}
 		}
 	}
+	// Trailing blanks so the last event isn't pressed against the bottom
+	// border when we've scrolled to the end. Reads as "that's it" instead
+	// of "there's more just offscreen".
+	lines = append(lines, "", "")
 	return lines
 }

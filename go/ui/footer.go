@@ -27,6 +27,7 @@ func renderFooter(width int, page, pageCount int) string {
 		footerKey("C-←↑↓→", "swap"),
 		footerKey("⏎", "hypr"),
 		footerKey("i", "inject"),
+		footerKey("o", "ports"),
 	)
 	if pageCount > 1 {
 		pill := lipgloss.NewStyle().Foreground(colAmber).Render("[ / ]") +
@@ -37,6 +38,39 @@ func renderFooter(width int, page, pageCount int) string {
 		footerKey("r", "rescan"),
 		footerKey("q", "quit"),
 	)
+	joined := " " + strings.Join(bits, "  ")
+	if lipgloss.Width(joined) > width {
+		joined = joined[:width]
+	}
+	return styleFooter.Width(width).Render(joined)
+}
+
+// renderPortsFooter — bottom strip for the ports view.
+func renderPortsFooter(width, visible, hidden int, showAll bool) string {
+	var summary string
+	switch {
+	case showAll:
+		summary = fmt.Sprintf("▪ %d listeners (all)", visible)
+	case hidden > 0:
+		summary = fmt.Sprintf("▪ %d listeners · %d hidden", visible, hidden)
+	default:
+		summary = fmt.Sprintf("▪ %d listeners", visible)
+	}
+	filterLabel := "all"
+	if showAll {
+		filterLabel = "filter"
+	}
+	bits := []string{
+		styleElapsed.Render(summary),
+		" ",
+		footerKey("↑↓", "move"),
+		footerKey("⏎", "hypr"),
+		footerKey("x", "kill"),
+		footerKey(".", filterLabel),
+		footerKey("o/esc", "back"),
+		footerKey("r", "rescan"),
+		footerKey("q", "quit"),
+	}
 	joined := " " + strings.Join(bits, "  ")
 	if lipgloss.Width(joined) > width {
 		joined = joined[:width]
