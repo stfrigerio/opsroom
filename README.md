@@ -1,9 +1,9 @@
 # opsroom
 
-A Cybersyn-style TUI wall for every running Claude Code session.
+TUI wall for every running Claude Code session.
 
 Scans `/proc` for `claude` processes, matches each to its
-`~/.claude/projects/*/*.jsonl` transcript, and renders a live amber
+`~/.claude/projects/*/*.jsonl` transcript, and renders a live
 grid: workspace, project, elapsed time, spinner, and a scrollable
 event log (thinking / tool use / text / prompts) per session. Hit
 **Enter** to focus the Hyprland window behind the focused card, or
@@ -85,8 +85,3 @@ control socket. Requires `allow_remote_control yes` and a predictable
   (hidden blocks streaming); waiting = last event is text ≥ 3s ago.
 - **Layout** — up to 3×3 cards per page; more sessions paginate.
   Pane order is stable across scans; `ctrl+arrow` reorders manually.
-
-## Status
-
-Works-on-my-machine on Arch + Hyprland + kitty. Not packaged, not
-tested elsewhere. Issues/PRs welcome.
