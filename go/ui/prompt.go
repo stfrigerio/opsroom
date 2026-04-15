@@ -92,7 +92,7 @@ func renderPromptPanel(
 	// input line.
 	sep := lipgloss.NewStyle().Foreground(colAmberDim).Render("  ◇  ")
 	hint := keyPill("⏎", "send") + sep +
-		keyPill("⇧⏎", "newline") + sep +
+		keyPill("\\⏎", "newline") + sep +
 		keyPill("␛", "abort")
 
 	inner := lipgloss.JoinVertical(lipgloss.Left,

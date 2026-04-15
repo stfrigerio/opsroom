@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -560,8 +561,15 @@ func (m Model) updatePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "enter":
-		// Plain Enter = send. Shift+Enter / Ctrl+J fall through to the textarea.
+		// Trailing `\` acts as line-continuation — mirrors Claude Code's
+		// own input. Terminals collapse Shift+Enter onto Enter without the
+		// kitty keyboard protocol, so `\`+Enter is the portable path.
 		text := m.prompt.Value()
+		if strings.HasSuffix(text, "\\") {
+			m.prompt.SetValue(strings.TrimSuffix(text, "\\") + "\n")
+			m.prompt.CursorEnd()
+			return m, nil
+		}
 		m.promptOpen = false
 		m.prompt.Reset()
 		m.prompt.Blur()
