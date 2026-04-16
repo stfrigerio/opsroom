@@ -260,6 +260,12 @@ func (p Port) IsNoise() bool {
 		strings.Contains(cmd, "--utility-sub-type=") {
 		return true
 	}
+	// Jupyter kernels open a pile of ZMQ sockets (shell, iopub, stdin, control,
+	// heartbeat) per notebook — useful to the notebook, but not what you'd
+	// call "a dev server you're running".
+	if strings.Contains(cmd, "ipykernel_launcher") {
+		return true
+	}
 	return false
 }
 

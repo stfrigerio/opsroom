@@ -398,6 +398,19 @@ func (m Model) killFocusedPort() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// interestingPortCount — non-noise listeners, independent of the
+// portsShowAll toggle. Used by the banner so its number stays stable as
+// the user pages noise in and out of the 'o' view.
+func (m Model) interestingPortCount() int {
+	n := 0
+	for _, p := range m.ports {
+		if !p.IsNoise() {
+			n++
+		}
+	}
+	return n
+}
+
 // visiblePorts — m.ports with IsNoise rows stripped unless portsShowAll is
 // on. Cheap to recompute per call; Scan() already sorts by port.
 func (m Model) visiblePorts() []ports.Port {

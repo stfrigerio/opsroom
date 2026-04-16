@@ -11,7 +11,7 @@ func (m Model) View() string {
 		return ""
 	}
 
-	banner := renderBanner(m.width, len(m.sessions), m.now)
+	banner := renderBanner(m.width, len(m.sessions), m.interestingPortCount(), m.now)
 	slots := computeSlotSuffixes(m.order, m.sessions, m.windows)
 	pc := m.pageCount()
 	footer := renderFooter(m.width, m.page, pc)
