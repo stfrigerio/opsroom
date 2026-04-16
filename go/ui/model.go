@@ -31,7 +31,7 @@ const (
 	// staleAfter — a waiting session that's idled past this threshold stops
 	// shouting in red and dims to gray; the user hasn't replied in a while
 	// and probably doesn't need the visual alarm anymore.
-	staleAfter = 10 * time.Minute
+	staleAfter = 5 * time.Minute
 )
 
 // ── messages ──────────────────────────────────────────────────────────────
