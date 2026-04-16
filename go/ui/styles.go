@@ -69,10 +69,12 @@ var borderFocused = lipgloss.Border{
 var (
 	styleApp = lipgloss.NewStyle().Background(colBG).Foreground(colAmber)
 
-	// Top banner — inverse amber, fixed width.
+	// Top banner — deep-amber stripe with bright amber text. Deliberately
+	// duller than the working-card header (which owns bright amber) so the
+	// eye ranks live card activity above static chrome.
 	styleBanner = lipgloss.NewStyle().
-			Background(colAmber).
-			Foreground(colBlack).
+			Background(colAmberDim).
+			Foreground(colAmberHi).
 			Bold(true).
 			Padding(0, 1)
 
