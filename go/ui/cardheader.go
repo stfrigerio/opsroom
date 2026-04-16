@@ -29,9 +29,14 @@ func renderCardHeader(
 	project := claude.ProjectName(sess.CWD)
 	elapsed := formatElapsed(sess.LastEventTS, now)
 
-	left := fmt.Sprintf(" %s · %s ", ws, strings.ToUpper(project))
+	projectLabel := strings.ToUpper(project)
+	if branch := gitBranch(sess.CWD); branch != "" {
+		projectLabel += " (" + branch + ")"
+	}
+
+	left := fmt.Sprintf(" %s · %s ", ws, projectLabel)
 	if slotSuffix != "" {
-		left = fmt.Sprintf(" %s · %s %s ", ws, strings.ToUpper(project), slotSuffix)
+		left = fmt.Sprintf(" %s · %s %s ", ws, projectLabel, slotSuffix)
 	}
 
 	right := elapsed

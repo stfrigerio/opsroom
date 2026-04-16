@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -86,6 +88,64 @@ func truncateToWidth(s string, width int) string {
 		visible += rw
 	}
 	return out.String()
+}
+
+// ── git branch lookup ─────────────────────────────────────────────────────
+
+// gitBranch — returns the branch name if cwd is inside a git repo,
+// a short SHA for detached HEAD, or "" otherwise. Handles worktrees,
+// where `.git` is a file pointing at the real gitdir.
+func gitBranch(cwd string) string {
+	if cwd == "" {
+		return ""
+	}
+	gitDir := findGitDir(cwd)
+	if gitDir == "" {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(gitDir, "HEAD"))
+	if err != nil {
+		return ""
+	}
+	head := strings.TrimSpace(string(data))
+	if ref, ok := strings.CutPrefix(head, "ref: refs/heads/"); ok {
+		return ref
+	}
+	if len(head) >= 7 {
+		return head[:7]
+	}
+	return ""
+}
+
+func findGitDir(cwd string) string {
+	dir := cwd
+	for {
+		p := filepath.Join(dir, ".git")
+		info, err := os.Stat(p)
+		if err == nil {
+			if info.IsDir() {
+				return p
+			}
+			data, err := os.ReadFile(p)
+			if err != nil {
+				return ""
+			}
+			line := strings.TrimSpace(string(data))
+			gitdir, ok := strings.CutPrefix(line, "gitdir: ")
+			if !ok {
+				return ""
+			}
+			if !filepath.IsAbs(gitdir) {
+				gitdir = filepath.Join(dir, gitdir)
+			}
+			return gitdir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
 }
 
 // ── slice helpers ─────────────────────────────────────────────────────────
