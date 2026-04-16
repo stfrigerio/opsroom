@@ -26,6 +26,7 @@ func renderFooter(width int, page, pageCount int) string {
 		footerKey("←↑↓→", "focus"),
 		footerKey("C-←↑↓→", "swap"),
 		footerKey("⏎", "hypr"),
+		footerKey("A-⏎", "browser"),
 		footerKey("i", "inject"),
 		footerKey("o", "ports"),
 	)

@@ -13,6 +13,7 @@ import (
 	"opsroom/claude"
 	"opsroom/hypr"
 	"opsroom/kitty"
+	"opsroom/marionette"
 	"opsroom/ports"
 )
 
@@ -58,6 +59,15 @@ type sendResult struct {
 	match string
 	pid   int
 	err   error
+}
+
+// browserResult — async outcome of a Ctrl-/b-triggered Firefox jump.
+// `focused` is true when an existing tab matched; false means we opened
+// a new one.
+type browserResult struct {
+	port    int
+	focused bool
+	err     error
 }
 
 // ── model ─────────────────────────────────────────────────────────────────
@@ -211,6 +221,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 		}
 
+	case browserResult:
+		switch {
+		case msg.err != nil:
+			m.setNote("firefox: "+msg.err.Error(), "error", 5*time.Second)
+		case msg.focused:
+			m.setNote(fmt.Sprintf("→ firefox: focused tab on :%d", msg.port), "info", 3*time.Second)
+		default:
+			m.setNote(fmt.Sprintf("→ firefox: opened :%d in new tab", msg.port), "info", 3*time.Second)
+		}
+
 	case clearNoteMsg:
 		m.note = ""
 	}
@@ -248,6 +268,13 @@ func (m Model) updateGrid(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if w := m.focusedWindow(); w != nil {
 			return m, jumpCmd(w.Address)
+		}
+	case "alt+enter", "b":
+		// alt+enter is the advertised binding (every terminal sends it as
+		// ESC-prefixed, which bubbletea parses reliably). `b` stays as a
+		// mnemonic fallback.
+		if cmd := m.focusBrowserCmd(); cmd != nil {
+			return m, cmd
 		}
 	case "i":
 		return m.openPrompt()
@@ -400,6 +427,135 @@ func (m Model) killFocusedPort() (tea.Model, tea.Cmd) {
 		"warn", 5*time.Second,
 	)
 	return m, nil
+}
+
+// portForSession picks the most plausible dev-server port for a claude
+// session. "Plausible" = non-noise, not a browser/editor, resolved PID,
+// and running inside the session's project dir (cwd == sess.CWD or a
+// subdirectory). Among candidates, lowest port wins — frontend dev
+// servers conventionally sit on 3xxx/5xxx, so the low pick is usually
+// the tab the user wants.
+//
+// The "inside-or-equal" match matters: without it, processes rooted at
+// $HOME (Firefox, Obsidian, anything launched from a file manager) would
+// false-match every session just because $HOME prefixes every project.
+func (m Model) portForSession(sess *claude.Session) (int, bool) {
+	if sess == nil || sess.CWD == "" {
+		return 0, false
+	}
+	best := 0
+	found := false
+	for _, p := range m.ports {
+		if p.IsNoise() || p.PID == 0 || p.CWD == "" {
+			continue
+		}
+		if isBrowserComm(p.Comm) {
+			continue
+		}
+		if !cwdContains(sess.CWD, p.CWD) {
+			continue
+		}
+		if !found || p.Port < best {
+			best = p.Port
+			found = true
+		}
+	}
+	return best, found
+}
+
+// cwdContains — true when `child` is `parent` or lives below it.
+func cwdContains(parent, child string) bool {
+	return parent == child || strings.HasPrefix(child, parent+"/")
+}
+
+// isBrowserComm — skip browser/editor processes when matching dev-server
+// ports. They're legitimate listeners (DevTools, Marionette, LSP) but they
+// are never the thing the user wants to open in a new tab.
+func isBrowserComm(comm string) bool {
+	switch strings.ToLower(comm) {
+	case "firefox", "firefox-bin", "firefox-esr",
+		"chrome", "chromium", "brave", "brave-browser",
+		"opera", "vivaldi", "msedge", "edge",
+		"code", "code-oss", "codium":
+		return true
+	}
+	return false
+}
+
+// focusBrowserCmd kicks off a Marionette jump for the focused session. The
+// actual dial + tab walk + Hyprland re-focus happens in the returned
+// tea.Cmd so the UI stays responsive while Firefox is queried.
+func (m Model) focusBrowserCmd() tea.Cmd {
+	sess := m.focusedSession()
+	if sess == nil {
+		return nil
+	}
+	port, ok := m.portForSession(sess)
+	if !ok {
+		return func() tea.Msg {
+			return browserResult{err: fmt.Errorf("no dev-server port matches this project")}
+		}
+	}
+	url := fmt.Sprintf("http://localhost:%d", port)
+	return func() tea.Msg {
+		c, err := marionette.Dial()
+		if err != nil {
+			return browserResult{port: port, err: fmt.Errorf("marionette unreachable — launch firefox with --marionette")}
+		}
+		defer c.Close()
+		matchTag := fmt.Sprintf(":%d", port)
+		focused, ferr := c.FocusURL(func(u string) bool {
+			return strings.Contains(u, matchTag)
+		}, url)
+		// Ask Marionette for the active tab's title — Firefox syncs its OS
+		// window title to this, which is our only reliable handle for
+		// identifying *which* Firefox window (across workspaces) holds the
+		// tab we just switched to. Give Firefox a beat to propagate.
+		title, _ := c.Title()
+		time.Sleep(80 * time.Millisecond)
+		windows, werr := hypr.Clients()
+		if werr == nil {
+			if addr := firefoxAddressByTitle(windows, title); addr != "" {
+				_ = hypr.Focus(addr)
+			} else if addr := firefoxFirstAddress(windows); addr != "" {
+				_ = hypr.Focus(addr)
+			}
+		}
+		return browserResult{port: port, focused: focused, err: ferr}
+	}
+}
+
+// firefoxAddressByTitle — find the Hyprland client whose class looks like
+// Firefox and whose title starts with `tabTitle`. Firefox's OS window title
+// is "<active tab title> — Mozilla Firefox", so a prefix match picks the
+// window that currently hosts that tab. Empty `tabTitle` means "no match".
+func firefoxAddressByTitle(ws []hypr.Window, tabTitle string) string {
+	if tabTitle == "" {
+		return ""
+	}
+	for _, w := range ws {
+		if !isFirefoxClass(w.Class) {
+			continue
+		}
+		if strings.HasPrefix(w.Title, tabTitle) {
+			return w.Address
+		}
+	}
+	return ""
+}
+
+func firefoxFirstAddress(ws []hypr.Window) string {
+	for _, w := range ws {
+		if isFirefoxClass(w.Class) {
+			return w.Address
+		}
+	}
+	return ""
+}
+
+func isFirefoxClass(class string) bool {
+	cl := strings.ToLower(class)
+	return strings.Contains(cl, "firefox") || cl == "navigator"
 }
 
 // interestingPortCount — non-noise listeners, independent of the
