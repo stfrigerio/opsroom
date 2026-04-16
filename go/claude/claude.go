@@ -625,7 +625,7 @@ func parseEvent(raw string) (Event, bool) {
 	// User prompts sometimes arrive as plain string content.
 	if role == "user" {
 		if s, ok := content.(string); ok && strings.TrimSpace(s) != "" {
-			return Event{TS: ts, Kind: KindUserPrompt, Summary: strings.TrimSpace(s)}, true
+			return Event{TS: ts, Kind: KindUserPrompt, Summary: sanitizeSummary(s)}, true
 		}
 	}
 
@@ -641,7 +641,7 @@ func parseEvent(raw string) (Event, bool) {
 	t := asString(item["type"])
 	switch t {
 	case "thinking":
-		text := strings.TrimSpace(asString(item["thinking"]))
+		text := sanitizeSummary(asString(item["thinking"]))
 		if text == "" {
 			// Extended-thinking content is delivered encrypted in `signature`;
 			// the plaintext `thinking` field is blank. Drop these — they'd
@@ -668,7 +668,7 @@ func parseEvent(raw string) (Event, bool) {
 		return Event{
 			TS:       ts,
 			Kind:     KindToolUse,
-			Summary:  strings.TrimSpace(desc),
+			Summary:  sanitizeSummary(desc),
 			ToolName: name,
 		}, true
 
@@ -682,7 +682,7 @@ func parseEvent(raw string) (Event, bool) {
 		return Event{
 			TS:      ts,
 			Kind:    KindText,
-			Summary: strings.TrimSpace(asString(item["text"])),
+			Summary: sanitizeSummary(asString(item["text"])),
 		}, true
 	}
 
@@ -695,10 +695,90 @@ func parseEvent(raw string) (Event, bool) {
 			text = s
 		}
 		if strings.TrimSpace(text) != "" {
-			return Event{TS: ts, Kind: KindUserPrompt, Summary: strings.TrimSpace(text)}, true
+			return Event{TS: ts, Kind: KindUserPrompt, Summary: sanitizeSummary(text)}, true
 		}
 	}
 	return Event{}, false
+}
+
+// sanitizeSummary strips terminal escape sequences and control characters
+// from text that will be rendered inside a TUI card. Shell output from `!`
+// commands often carries ANSI color codes, cursor-movement sequences, and
+// \r-based progress-bar overwrites — any of which corrupts our column
+// accounting and blows the grid layout. We keep only printable characters,
+// tabs, and newlines; for \r we collapse each line to the segment after the
+// last \r (mirroring what a terminal would actually display).
+func sanitizeSummary(s string) string {
+	s = stripANSIEscapes(s)
+	// Per-line \r overwrite: "step 1\rstep 2\rstep 3" → "step 3".
+	lines := strings.Split(s, "\n")
+	for i, ln := range lines {
+		if j := strings.LastIndex(ln, "\r"); j >= 0 {
+			lines[i] = ln[j+1:]
+		}
+	}
+	s = strings.Join(lines, "\n")
+
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r == '\n' || r == '\t' {
+			b.WriteRune(r)
+			continue
+		}
+		if r < 0x20 || r == 0x7f {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// stripANSIEscapes removes ESC-introduced sequences: CSI (\x1b[…<letter>),
+// OSC (\x1b]…BEL or …ESC\\), and 2-byte escapes. Anything else that starts
+// with ESC gets its ESC dropped and payload kept — worst case is a stray
+// letter slips through, which is harmless.
+func stripANSIEscapes(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		if s[i] != 0x1b {
+			b.WriteByte(s[i])
+			i++
+			continue
+		}
+		i++ // skip ESC
+		if i >= len(s) {
+			break
+		}
+		switch s[i] {
+		case '[':
+			i++
+			for i < len(s) {
+				c := s[i]
+				i++
+				if c >= 0x40 && c <= 0x7e {
+					break
+				}
+			}
+		case ']':
+			i++
+			for i < len(s) {
+				if s[i] == 0x07 {
+					i++
+					break
+				}
+				if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '\\' {
+					i += 2
+					break
+				}
+				i++
+			}
+		default:
+			i++
+		}
+	}
+	return b.String()
 }
 
 // isWorking — claude is probably mid-response if either
