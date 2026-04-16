@@ -9,14 +9,17 @@ type cardState struct {
 	focused bool
 	working bool
 	waiting bool
+	stale   bool // waiting long enough that red is no longer honest
 }
 
 // frameStyle — border around the card. Focus wins so the user always knows
-// where their keystrokes go.
+// where their keystrokes go; after that stale downgrades waiting to gray.
 func (s cardState) frameStyle() lipgloss.Style {
 	switch {
 	case s.focused:
 		return styleCardFocused
+	case s.stale:
+		return styleCardStale
 	case s.waiting:
 		return styleCardWaiting
 	case s.working:
@@ -29,6 +32,8 @@ func (s cardState) frameStyle() lipgloss.Style {
 // stays out so waiting/working remain visible on the focused card.
 func (s cardState) headerStyle() lipgloss.Style {
 	switch {
+	case s.stale:
+		return styleCardHeaderStale
 	case s.waiting:
 		return styleCardHeaderWaiting
 	case s.working:
@@ -41,6 +46,8 @@ func (s cardState) headerStyle() lipgloss.Style {
 // cyan for focus, amber for working, dim amber for idle.
 func (s cardState) thumbColor() lipgloss.Color {
 	switch {
+	case s.stale:
+		return colStale
 	case s.waiting:
 		return colAlert
 	case s.focused:

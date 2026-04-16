@@ -23,6 +23,12 @@ var (
 	// unambiguously.
 	colFocus = lipgloss.Color("#00E1FF")
 
+	// Stale: neutral gray for sessions that have been waiting long enough
+	// that the red "look at me" has earned a demotion. Not in the amber
+	// family on purpose — reads as "phosphor cooled down".
+	colStale    = lipgloss.Color("#4A4A4A")
+	colStaleDim = lipgloss.Color("#2E2E2E")
+
 	colBlack = lipgloss.Color("#000000")
 )
 
@@ -105,6 +111,12 @@ var (
 				Border(borderDouble).
 				BorderForeground(colAlert)
 
+	// Stale: the session has been waiting long enough that red is no longer
+	// honest. Drop to neutral gray and the heavy (idle) border.
+	styleCardStale = styleCard.
+			Border(borderHeavy).
+			BorderForeground(colStale)
+
 	// Focused: cyan double border with diamond corner markers. Cyan is
 	// reserved for focus — amber is for state, red for alert.
 	styleCardFocused = styleCard.
@@ -129,6 +141,13 @@ var (
 				Bold(true).
 				Foreground(colBlack).
 				Background(colAlert)
+
+	// Stale: same shape as the other headers but in neutral gray, matching
+	// the demoted frame.
+	styleCardHeaderStale = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(colBlack).
+				Background(colStale)
 
 	// ── Event glyphs and labels ──────────────────────────────────────────
 	//

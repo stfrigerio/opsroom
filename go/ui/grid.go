@@ -141,6 +141,8 @@ func renderGrid(in gridInput) string {
 				cells = append(cells, blankCell(layout.cardW, cardH))
 				continue
 			}
+			stale := sess.IsWaiting && !sess.LastEventTS.IsZero() &&
+				in.now.Sub(sess.LastEventTS) > staleAfter
 			out := renderCard(cardInput{
 				session: sess,
 				window:  hypr.WindowForPID(pid, in.windows),
@@ -148,6 +150,7 @@ func renderGrid(in gridInput) string {
 					focused: idx == in.focus,
 					working: sess.IsWorking,
 					waiting: sess.IsWaiting,
+					stale:   stale,
 				},
 				width:      layout.cardW,
 				height:     cardH,
