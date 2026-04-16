@@ -163,6 +163,64 @@ func Discover(eventLimit int) ([]Session, error) {
 		debugLog("    pass3 pid=%d → %s (dir-newest)", pid, filepath.Base(candidates[0].path))
 	}
 
+	// Pass 4 (refresh): if a freshly-written unclaimed jsonl has appeared in
+	// the pid's project dir — and its first event falls after the pid's
+	// start time — prefer it. Catches `/clear` and session-switch cases
+	// where the pid keeps running but starts writing to a new transcript;
+	// without this, the pane stays frozen at the old conversation.
+	bt := bootTime()
+	for pid, currentPath := range pidTranscript {
+		cwd, _ := cwdOf(pid)
+		if cwd == "" {
+			continue
+		}
+		start := pidStartTime(pid, bt)
+		if start.IsZero() {
+			continue
+		}
+		currentFi, err := os.Stat(currentPath)
+		if err != nil {
+			continue
+		}
+		currentMtime := currentFi.ModTime()
+
+		dir := filepath.Join(projectsDir, slugFor(cwd))
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		var bestPath string
+		var bestMtime time.Time
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
+				continue
+			}
+			p := filepath.Join(dir, e.Name())
+			if p == currentPath || claimed[p] {
+				continue
+			}
+			fi, err := e.Info()
+			if err != nil || !fi.ModTime().After(currentMtime) {
+				continue
+			}
+			ft := jsonlFirstTimestamp(p)
+			if ft.IsZero() || ft.Before(start) {
+				continue
+			}
+			if bestPath == "" || fi.ModTime().After(bestMtime) {
+				bestPath = p
+				bestMtime = fi.ModTime()
+			}
+		}
+		if bestPath != "" {
+			delete(claimed, currentPath)
+			pidTranscript[pid] = bestPath
+			claimed[bestPath] = true
+			debugLog("    pass4 pid=%d switched → %s (fresher than %s)",
+				pid, filepath.Base(bestPath), filepath.Base(currentPath))
+		}
+	}
+
 	now := time.Now()
 	var sessions []Session
 	for pid, tr := range pidTranscript {
