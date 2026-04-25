@@ -1,4 +1,4 @@
-"""Opsroom — a Cybersyn-style TUI wall for every running Claude Code session."""
+"""Wall 墙 — a Cybersyn-style TUI wall for every running Claude Code session."""
 
 from __future__ import annotations
 
@@ -337,7 +337,7 @@ class PromptModal(ModalScreen[str | None]):
         self.dismiss(None)
 
 
-class Opsroom(App[None]):
+class Wall(App[None]):
     CSS = """
     #grid {
         grid-size: 3;
@@ -372,7 +372,7 @@ class Opsroom(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
-        self.title = "opsroom"
+        self.title = "Wall 墙"
         self.sub_title = "claude wall"
         self.set_interval(REFRESH_SECONDS, self._scan)
         self._scan()
@@ -496,7 +496,7 @@ class Opsroom(App[None]):
 
 
 def main() -> None:
-    Opsroom().run()
+    Wall().run()
 
 
 if __name__ == "__main__":

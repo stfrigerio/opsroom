@@ -11,10 +11,10 @@ import (
 // on the right. Truncates from the right if the terminal is too narrow.
 // When `pageCount > 1`, inserts a `PAGE n/m` indicator between telemetry
 // and the keybind pills and adds the `[]` pill for pagination.
-func renderFooter(width int, page, pageCount int) string {
+func renderFooter(width, portCount, page, pageCount int) string {
 	bits := []string{
-		styleElapsed.Render("● LINK HYPR"),
-		styleElapsed.Render("● KITTY"),
+		styleBanner.Render(" WALL 墙 "),
+		styleElapsed.Render(fmt.Sprintf("PORTS·%02d", portCount)),
 		styleElapsed.Render(fmt.Sprintf("Δ %s", refreshInterval)),
 	}
 	if pageCount > 1 {
@@ -28,6 +28,8 @@ func renderFooter(width int, page, pageCount int) string {
 		footerKey("⏎", "hypr"),
 		footerKey("A-⏎", "browser"),
 		footerKey("i", "inject"),
+		footerKey("f", "zoom"),
+		footerKey("t", "labels"),
 		footerKey("o", "ports"),
 	)
 	if pageCount > 1 {
@@ -41,7 +43,7 @@ func renderFooter(width int, page, pageCount int) string {
 	)
 	joined := " " + strings.Join(bits, "  ")
 	if lipgloss.Width(joined) > width {
-		joined = joined[:width]
+		joined = truncateToWidth(joined, width)
 	}
 	return styleFooter.Width(width).Render(joined)
 }
@@ -74,7 +76,7 @@ func renderPortsFooter(width, visible, hidden int, showAll bool) string {
 	}
 	joined := " " + strings.Join(bits, "  ")
 	if lipgloss.Width(joined) > width {
-		joined = joined[:width]
+		joined = truncateToWidth(joined, width)
 	}
 	return styleFooter.Width(width).Render(joined)
 }

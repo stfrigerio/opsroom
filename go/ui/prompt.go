@@ -7,11 +7,11 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/lipgloss"
 
-	"opsroom/claude"
-	"opsroom/hypr"
+	"wall/claude"
+	"wall/hypr"
 )
 
-// stylePromptTextarea — apply the opsroom palette to a bubbles textarea.
+// stylePromptTextarea — apply the wall palette to a bubbles textarea.
 // Call this once at construction. Keeps textarea aesthetics local to the
 // prompt component.
 //

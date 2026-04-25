@@ -3,8 +3,8 @@ package ui
 import (
 	"fmt"
 
-	"opsroom/claude"
-	"opsroom/hypr"
+	"wall/claude"
+	"wall/hypr"
 )
 
 // computeSlotSuffixes — produce a map[pid]→"#N" for any claudes that share a

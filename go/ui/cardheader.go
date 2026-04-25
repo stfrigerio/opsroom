@@ -7,8 +7,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"opsroom/claude"
-	"opsroom/hypr"
+	"wall/claude"
+	"wall/hypr"
 )
 
 // renderCardHeader — one-row inverse stripe inside the card's top border.

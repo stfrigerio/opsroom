@@ -6,4 +6,4 @@ dist/
 uv.lock
 
 # Go build output
-/go/opsroom
+/go/wall

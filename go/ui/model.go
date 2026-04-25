@@ -10,11 +10,11 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"opsroom/claude"
-	"opsroom/hypr"
-	"opsroom/kitty"
-	"opsroom/marionette"
-	"opsroom/ports"
+	"wall/claude"
+	"wall/hypr"
+	"wall/kitty"
+	"wall/marionette"
+	"wall/ports"
 )
 
 // view — which pane set is showing. Default zero value is the claude grid.
@@ -86,7 +86,9 @@ type Model struct {
 	page  int // 0-based page of the grid when cards paginate
 
 	view         viewMode
-	portsFocus   int // index into m.visiblePorts() when view == viewPorts
+	focusedOnly  bool // f toggles: show only the focused card at full size
+	hideLabels   bool // t toggles: hide TOOL/TEXT/YOU/etc. labels, keep only glyphs
+	portsFocus   int  // index into m.visiblePorts() when view == viewPorts
 	portsShowAll bool
 
 	// Two-step kill confirmation: first `x` arms, second `x` on the same
@@ -281,6 +283,10 @@ func (m Model) updateGrid(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "o":
 		m.view = viewPorts
 		m.clampPortsFocus()
+	case "f":
+		m.focusedOnly = !m.focusedOnly
+	case "t":
+		m.hideLabels = !m.hideLabels
 	case "]", "ctrl+tab":
 		m.nextPage()
 	case "[", "ctrl+shift+tab":

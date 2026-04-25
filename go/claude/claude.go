@@ -52,9 +52,9 @@ type Session struct {
 	TranscriptMTime time.Time
 }
 
-// debugLog — if OPSROOM_DEBUG is set, append a line to $OPSROOM_DEBUG.
+// debugLog — if WALL_DEBUG is set, append a line to $WALL_DEBUG.
 func debugLog(format string, args ...any) {
-	path := os.Getenv("OPSROOM_DEBUG")
+	path := os.Getenv("WALL_DEBUG")
 	if path == "" {
 		return
 	}
@@ -612,10 +612,26 @@ func sessionIDFromCmdline(pid int) string {
 	return ""
 }
 
+// slugFor mirrors Claude's project-dir naming: every rune outside
+// [-a-zA-Z0-9] collapses to `-`. Without this, a cwd like
+// "/home/user/Github/bambù" would map to "-home-user-Github-bambù"
+// instead of the real "-home-user-Github-bamb-", and the session's
+// transcript would be invisible to discovery.
 func slugFor(cwd string) string {
-	s := strings.ReplaceAll(cwd, "/", "-")
-	s = strings.ReplaceAll(s, "_", "-")
-	return s
+	var b strings.Builder
+	b.Grow(len(cwd))
+	for _, r := range cwd {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	return b.String()
 }
 
 // tailLines reads up to `maxBytes` from the end of `path`, splits on newline,

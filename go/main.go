@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"opsroom/ui"
+	"wall/ui"
 )
 
 func main() {
@@ -16,7 +16,7 @@ func main() {
 		tea.WithMouseAllMotion(),
 	)
 	if _, err := p.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, "opsroom:", err)
+		fmt.Fprintln(os.Stderr, "wall:", err)
 		os.Exit(1)
 	}
 }

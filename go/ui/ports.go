@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"opsroom/ports"
+	"wall/ports"
 )
 
 // renderPortsView — full-body table of every listening TCP socket. Columns:

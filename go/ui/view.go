@@ -11,16 +11,11 @@ func (m Model) View() string {
 		return ""
 	}
 
-	banner := renderBanner(m.width, len(m.sessions), m.interestingPortCount(), m.now)
 	slots := computeSlotSuffixes(m.order, m.sessions, m.windows)
 	pc := m.pageCount()
-	footer := renderFooter(m.width, m.page, pc)
+	footer := renderFooter(m.width, m.interestingPortCount(), m.page, pc)
 
-	// Reserve 1 extra row between banner and grid as breathing space; this
-	// also protects us against off-by-one surprises if lipgloss.Height ever
-	// miscounts the banner on wrapped/styled input.
-	const topMargin = 1
-	bodyH := m.height - lipgloss.Height(banner) - lipgloss.Height(footer) - topMargin
+	bodyH := m.height - lipgloss.Height(footer)
 	if m.note != "" {
 		bodyH--
 	}
@@ -33,7 +28,7 @@ func (m Model) View() string {
 		vis := m.visiblePorts()
 		hidden := len(m.ports) - len(vis)
 		body = renderPortsView(vis, m.width, bodyH, m.portsFocus)
-		parts := []string{banner, "", body}
+		parts := []string{body}
 		if m.note != "" {
 			parts = append(parts, renderNote(m.width, m.note, m.noteSev))
 		}
@@ -62,7 +57,7 @@ func (m Model) View() string {
 		body = renderGrid(m.gridInput(bodyH, slots))
 	}
 
-	parts := []string{banner, "", body}
+	parts := []string{body}
 	if m.note != "" {
 		parts = append(parts, renderNote(m.width, m.note, m.noteSev))
 	}
@@ -74,17 +69,19 @@ func (m Model) View() string {
 // Model so View() doesn't need to reach into private fields itself.
 func (m Model) gridInput(height int, slots map[int]string) gridInput {
 	return gridInput{
-		order:     m.order,
-		sessions:  m.sessions,
-		windows:   m.windows,
-		focus:     m.focus,
-		width:     m.width,
-		height:    height,
-		scroll:    m.scroll,
-		sticky:    m.sticky,
-		maxScroll: m.maxScroll,
-		slots:     slots,
-		page:      m.page,
-		now:       m.now,
+		order:       m.order,
+		sessions:    m.sessions,
+		windows:     m.windows,
+		focus:       m.focus,
+		width:       m.width,
+		height:      height,
+		scroll:      m.scroll,
+		sticky:      m.sticky,
+		maxScroll:   m.maxScroll,
+		slots:       slots,
+		page:        m.page,
+		focusedOnly: m.focusedOnly,
+		hideLabels:  m.hideLabels,
+		now:         m.now,
 	}
 }

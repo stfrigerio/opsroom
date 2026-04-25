@@ -1,4 +1,4 @@
-# opsroom
+# Wall 墙
 
 TUI wall for every running Claude Code session.
 
@@ -15,8 +15,8 @@ Needs Go ≥ 1.22.
 
 ```bash
 cd go
-go build -o opsroom .
-./opsroom
+go build -o wall .
+./wall
 ```
 
 Or drop a symlink on your `$PATH` — see `INSTALL.md`.
@@ -39,6 +39,7 @@ Without hypr/kitty the grid still renders; only `⏎` and `i` go quiet.
 | ←↑↓→ / hjkl        | move focus between cards                  |
 | mouse motion       | hover-to-focus                            |
 | enter              | focus the Hyprland window for this card   |
+| alt+enter / b      | jump Firefox to the card's dev-server tab |
 | i                  | open prompt modal → injects into kitty    |
 
 **Card scrolling**
@@ -57,6 +58,14 @@ Without hypr/kitty the grid still renders; only `⏎` and `i` go quiet.
 | ctrl+←↑↓→          | swap the focused pane with its neighbour  |
 | [ / ] (n / p)      | previous / next page                      |
 | ctrl+tab / shift   | previous / next page                      |
+
+**View**
+
+| key                | action                                    |
+|--------------------|-------------------------------------------|
+| f                  | zoom — focused card fills the whole body  |
+| t                  | toggle TEXT/TOOL/YOU labels (glyphs stay) |
+| o                  | open ports view (esc / o to return)       |
 
 **Other**
 

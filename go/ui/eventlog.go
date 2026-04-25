@@ -3,17 +3,18 @@ package ui
 import (
 	"strings"
 
-	"opsroom/claude"
+	"wall/claude"
 )
 
 // ── event log viewport ────────────────────────────────────────────────────
 
 type eventLogInput struct {
-	events []claude.Event
-	width  int
-	height int
-	scroll int
-	sticky bool
+	events     []claude.Event
+	width      int
+	height     int
+	scroll     int
+	sticky     bool
+	hideLabels bool
 }
 
 type eventLogOutput struct {
@@ -26,7 +27,7 @@ type eventLogOutput struct {
 // window, returns both the rendered string and the resolved scroll/max so
 // the caller can persist them. Nothing reaches back into model state.
 func renderEventLog(in eventLogInput) eventLogOutput {
-	lines := buildEventLines(in.events, in.width)
+	lines := buildEventLines(in.events, in.width, in.hideLabels)
 
 	maxOff := len(lines) - in.height
 	if maxOff < 0 {
@@ -77,25 +78,32 @@ func renderEventLog(in eventLogInput) eventLogOutput {
 //
 //	"  ▸  TOOL   <summary>"           ← 2 + 1 + 2 + 5 + 2 = 12 cols prefix
 //	"            <continuation>"      ← 12 cols hanging indent
+//
+// When labels are hidden, the prefix collapses to "  ▸  " (2+1+2 = 5 cols).
 const (
-	elRowIndent   = "  "
-	elLabelGap    = "  "
-	elSummaryGap  = "  "
-	elPrefixWidth = 2 + 1 + 2 + 5 + 2
+	elRowIndent      = "  "
+	elLabelGap       = "  "
+	elSummaryGap     = "  "
+	elPrefixWidth    = 2 + 1 + 2 + 5 + 2
+	elPrefixWidthNoL = 2 + 1 + 2 // elRowIndent + glyph + elSummaryGap
 )
 
 // buildEventLines — produce fully styled, wrapped lines for every event.
 // Wrap math is done on plain text; ANSI is applied after wrapping so it
 // never throws off width measurement.
-func buildEventLines(events []claude.Event, width int) []string {
+func buildEventLines(events []claude.Event, width int, hideLabels bool) []string {
 	if len(events) == 0 {
 		return []string{styleEmpty.Render("(fresh session — press i to send)")}
 	}
 
-	hang := strings.Repeat(" ", elPrefixWidth)
+	prefixW := elPrefixWidth
+	if hideLabels {
+		prefixW = elPrefixWidthNoL
+	}
+	hang := strings.Repeat(" ", prefixW)
 	// -2 safety margin: terminals miscount wide chars; we also want lipgloss
 	// frames to have zero reason to re-wrap us.
-	summaryW := width - elPrefixWidth - 2
+	summaryW := width - prefixW - 2
 	if summaryW < 10 {
 		summaryW = 10
 	}
@@ -116,9 +124,14 @@ func buildEventLines(events []claude.Event, width int) []string {
 		}
 		styledPrefix := elRowIndent +
 			styleGlyph[kind].Render(glyph) +
-			elLabelGap +
-			styleLabel.Render(label) +
 			elSummaryGap
+		if !hideLabels {
+			styledPrefix = elRowIndent +
+				styleGlyph[kind].Render(glyph) +
+				elLabelGap +
+				styleLabel.Render(label) +
+				elSummaryGap
+		}
 
 		switch ev.Kind {
 		case claude.KindToolUse, claude.KindToolResult:

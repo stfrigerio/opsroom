@@ -1,4 +1,4 @@
-module opsroom
+module wall
 
 go 1.22
 

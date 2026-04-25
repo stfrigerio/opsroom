@@ -6,8 +6,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"opsroom/claude"
-	"opsroom/hypr"
+	"wall/claude"
+	"wall/hypr"
 )
 
 // gridInput — everything renderGrid needs. `scroll` and `maxScroll` are maps
@@ -23,9 +23,11 @@ type gridInput struct {
 	scroll    map[int]int
 	sticky    map[int]bool
 	maxScroll map[int]int
-	slots     map[int]string // pid → "#1"/"#2"/… (empty / missing = solo)
-	page      int            // 0-based current page when cards paginate
-	now       time.Time
+	slots       map[int]string // pid → "#1"/"#2"/… (empty / missing = solo)
+	page        int            // 0-based current page when cards paginate
+	focusedOnly bool           // render only the focused card at full body size
+	hideLabels  bool           // drop TOOL/TEXT/YOU/etc. labels from event rows
+	now         time.Time
 }
 
 // Layout tunables.
@@ -108,6 +110,12 @@ func renderGrid(in gridInput) string {
 		return renderEmpty(in.width, in.height)
 	}
 
+	if in.focusedOnly && in.focus >= 0 && in.focus < len(in.order) {
+		if s := renderFocusedOnly(in); s != "" {
+			return s
+		}
+	}
+
 	layout := computeGridLayout(len(in.order), in.width, in.height)
 
 	// Clamp page to valid range.
@@ -156,6 +164,7 @@ func renderGrid(in gridInput) string {
 				height:     cardH,
 				scroll:     in.scroll[pid],
 				sticky:     in.sticky[pid],
+				hideLabels: in.hideLabels,
 				now:        in.now,
 				slotSuffix: in.slots[pid],
 			})
@@ -170,6 +179,45 @@ func renderGrid(in gridInput) string {
 		rowStrs = append(rowStrs, row)
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, rowStrs...)
+}
+
+// renderFocusedOnly — single-card zoom path: render just the focused
+// session filling the whole body area. Returns "" if the focused pid has no
+// live session so the caller falls back to normal grid layout.
+func renderFocusedOnly(in gridInput) string {
+	pid := in.order[in.focus]
+	var sess *claude.Session
+	for i := range in.sessions {
+		if in.sessions[i].PID == pid {
+			sess = &in.sessions[i]
+			break
+		}
+	}
+	if sess == nil {
+		return ""
+	}
+	stale := sess.IsWaiting && !sess.LastEventTS.IsZero() &&
+		in.now.Sub(sess.LastEventTS) > staleAfter
+	out := renderCard(cardInput{
+		session: sess,
+		window:  hypr.WindowForPID(pid, in.windows),
+		state: cardState{
+			focused: true,
+			working: sess.IsWorking,
+			waiting: sess.IsWaiting,
+			stale:   stale,
+		},
+		width:      in.width,
+		height:     in.height,
+		scroll:     in.scroll[pid],
+		sticky:     in.sticky[pid],
+		hideLabels: in.hideLabels,
+		now:        in.now,
+		slotSuffix: in.slots[pid],
+	})
+	in.scroll[pid] = out.scroll
+	in.maxScroll[pid] = out.maxOff
+	return out.rendered
 }
 
 // blankCell — a correctly-sized empty rectangle for unoccupied grid slots.

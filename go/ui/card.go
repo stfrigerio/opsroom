@@ -5,8 +5,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"opsroom/claude"
-	"opsroom/hypr"
+	"wall/claude"
+	"wall/hypr"
 )
 
 // cardInput — everything needed to render one card. Explicit dependencies
@@ -19,6 +19,7 @@ type cardInput struct {
 	height  int
 	scroll  int
 	sticky  bool
+	hideLabels bool
 	now     time.Time
 	// slotSuffix — "#1"/"#2"/… when multiple claudes share the same
 	// (workspace, project). Empty when this card is unique.
@@ -60,11 +61,12 @@ func renderCard(in cardInput) cardOutput {
 	}
 
 	log := renderEventLog(eventLogInput{
-		events: in.session.Events,
-		width:  bodyW,
-		height: bodyH,
-		scroll: in.scroll,
-		sticky: in.sticky,
+		events:     in.session.Events,
+		width:      bodyW,
+		height:     bodyH,
+		scroll:     in.scroll,
+		sticky:     in.sticky,
+		hideLabels: in.hideLabels,
 	})
 
 	bar := renderScrollbar(log.scroll, log.maxOff, bodyH, in.state.thumbColor())
