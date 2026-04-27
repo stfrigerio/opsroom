@@ -2,6 +2,7 @@
 package claude
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -488,30 +489,32 @@ func pidStartTime(pid int, boot time.Time) time.Time {
 	return boot.Add(time.Duration(ticks) * time.Second / 100)
 }
 
-// jsonlFirstTimestamp — scan the first ~16KB looking for the earliest
+// jsonlFirstTimestamp — scan the first few lines looking for the earliest
 // "timestamp" field. Claude writes a few timestamp-less preamble records
 // (permission-mode etc.) before the first real event, so a naive
-// first-line parse misses them. Returns zero if nothing found.
+// first-line parse misses them. We use bufio.Scanner with a large buffer
+// cap because a single line can balloon to MBs when the user pastes an
+// image — a fixed-size byte read would truncate that line and silently
+// reject the whole file, which then breaks pid↔transcript matching.
+// Returns zero if nothing usable found.
 func jsonlFirstTimestamp(path string) time.Time {
 	f, err := os.Open(path)
 	if err != nil {
 		return time.Time{}
 	}
 	defer f.Close()
-	buf := make([]byte, 16*1024)
-	n, _ := f.Read(buf)
-	if n == 0 {
-		return time.Time{}
-	}
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 4096), 64*1024*1024)
 	var earliest time.Time
-	for _, line := range strings.Split(string(buf[:n]), "\n") {
-		if line == "" {
+	for scanned := 0; scanner.Scan() && scanned < 20; scanned++ {
+		line := scanner.Bytes()
+		if len(line) == 0 {
 			continue
 		}
 		var obj struct {
 			Timestamp string `json:"timestamp"`
 		}
-		if err := json.Unmarshal([]byte(line), &obj); err != nil {
+		if err := json.Unmarshal(line, &obj); err != nil {
 			continue
 		}
 		if obj.Timestamp == "" {
