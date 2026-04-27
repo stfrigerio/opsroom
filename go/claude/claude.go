@@ -165,10 +165,18 @@ func Discover(eventLimit int) ([]Session, error) {
 	}
 
 	// Pass 4 (refresh): if a freshly-written unclaimed jsonl has appeared in
-	// the pid's project dir — and its first event falls after the pid's
-	// start time — prefer it. Catches `/clear` and session-switch cases
-	// where the pid keeps running but starts writing to a new transcript;
-	// without this, the pane stays frozen at the old conversation.
+	// the pid's project dir, prefer it. Catches `/clear`, `/resume`, and
+	// session-switch cases where the pid keeps running but starts writing
+	// to a different transcript; without this, the pane stays frozen at
+	// the old conversation.
+	//
+	// Selection is mtime-only: the candidate must be newer than the
+	// current claim AND have been touched at or after the pid's start
+	// time (so we don't switch to a stale file that happened to be the
+	// "least old" unclaimed). We deliberately don't gate on first-event
+	// timestamp — `/resume` appends to a transcript whose first event
+	// predates the pid, which previously made pass 4 reject the right
+	// file.
 	bt := bootTime()
 	for pid, currentPath := range pidTranscript {
 		cwd, _ := cwdOf(pid)
@@ -204,8 +212,7 @@ func Discover(eventLimit int) ([]Session, error) {
 			if err != nil || !fi.ModTime().After(currentMtime) {
 				continue
 			}
-			ft := jsonlFirstTimestamp(p)
-			if ft.IsZero() || ft.Before(start) {
+			if fi.ModTime().Before(start) {
 				continue
 			}
 			if bestPath == "" || fi.ModTime().After(bestMtime) {
